@@ -28,7 +28,7 @@ jobs:
 
       - name: Unpack the source (uploaded as niuma_pos_flutter.zip)
         run: |
-          if [ -f niuma_pos_flutter.zip ]; then unzip -o -q niuma_pos_flutter.zip -x '.github/*'; fi
+          for z in *.zip; do unzip -o -q "$z" -x '.github/*'; done
           ls
 
       - name: Add platform files
