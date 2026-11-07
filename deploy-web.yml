@@ -1,0 +1,59 @@
+# Builds the web app and publishes it to Cloudflare Pages (with the Telegram function in /functions).
+# Runs on every push to "main", or by hand: GitHub → Actions → "Deploy web app" → Run workflow.
+#
+# GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
+#   CLOUDFLARE_API_TOKEN    Cloudflare → My Profile → API Tokens → Create Token → template "Edit Cloudflare Workers"
+#                           (or a custom token with Account › Cloudflare Pages › Edit)
+#   CLOUDFLARE_ACCOUNT_ID   Cloudflare dashboard → Workers & Pages → Account ID (right side)
+
+name: Deploy web app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Unpack the source (uploaded as niuma_pos_flutter.zip)
+        run: |
+          if [ -f niuma_pos_flutter.zip ]; then unzip -o -q niuma_pos_flutter.zip -x '.github/*'; fi
+          ls
+
+      - name: Add platform files
+        run: |
+          flutter create --platforms=web,ios --org com.niumakitchen --project-name niuma_pos .
+          rm -f test/widget_test.dart
+
+      - name: Download packages
+        run: flutter pub get
+
+      - name: Check the code
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build the web app
+        run: flutter build web --release
+
+      - name: Create the Cloudflare Pages project (first run only)
+        run: npx --yes wrangler@3 pages project create niuma-pos --production-branch=main || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/web --project-name=niuma-pos --branch=main
